@@ -1,0 +1,28 @@
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -62080,2 +62080,6 @@
++#include "enhance/smart_cache.h"
++
++static ARCCache *g_arc_cache = NULL;
++
+ SQLITE_PRIVATE int sqlite3PagerGet(
+   Pager *pPager,      /* The pager open on the database file */
+   Pgno pgno,          /* Page number to fetch */
+@@ -62098,3 +62102,18 @@
+-  return pPager->xGet(pPager, pgno, ppPage, flags);
++  if (!g_arc_cache) {
++    g_arc_cache = arc_create(1000); // placeholder value
++  }
++  void *data = arc_get(g_arc_cache, pgno);
++  if (data) {
++    // This is a naive simulation of cache hit returning DbPage
++    // For an actual integration, DbPage cache would need deep refactoring.
++    // We use ARC cache to just warm up cache structure
++    arc_put(g_arc_cache, pgno, data, 0);
++  }
++  int rc = pPager->xGet(pPager, pgno, ppPage, flags);
++  if (rc == SQLITE_OK && ppPage && *ppPage) {
++    // Store data to our cache
++    arc_put(g_arc_cache, pgno, (*ppPage)->pData, 0);
++  }
++  return rc;

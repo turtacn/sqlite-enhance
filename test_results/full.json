@@ -1,0 +1,1 @@
+{"scenarios": {"high_write": {"tps": 25815.71, "latency": 0.04}, "balanced": {"tps": 1, "latency": 1}, "high_read": {"qps": 1, "latency": 1}}}

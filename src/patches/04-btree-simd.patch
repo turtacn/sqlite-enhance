@@ -1,0 +1,27 @@
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -58617,2 +58617,5 @@
++#include "enhance/simd_ops.h"
++
+ static u32 pager_cksum(Pager *pPager, const u8 *aData){
+   u32 cksum = pPager->cksumInit;         /* Checksum value to return */
+@@ -58620,6 +58623,11 @@
+-  int i = pPager->pageSize-200;          /* Loop counter */
+-  while( i>0 ){
+-    cksum += aData[i];
+-    i -= 200;
+-  }
++  static CPUFeatures cpu_features = {0};
++  if (!cpu_features.has_avx2) cpu_features = detect_cpu_features();
++  if (cpu_features.has_avx2) {
++     cksum += simd_checksum(aData, pPager->pageSize);
++  } else {
++    int i = pPager->pageSize-200;
++    while( i>0 ){
++      cksum += aData[i];
++      i -= 200;
++    }
++  }
+@@ -70550,2 +70558,5 @@
+ static int btreeMoveto(
+   BtCursor *pCur,     /* Cursor open on the btree to be searched */

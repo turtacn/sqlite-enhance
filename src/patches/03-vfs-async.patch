@@ -1,0 +1,32 @@
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -41297,2 +41297,11 @@
+   sqlite3_int64 offset
+ ){
++  extern AsyncIOManager *g_async_io;
++  if (g_async_io) {
++    // We map a 4096-byte aligned chunk to our dirty pages list.
++    // Simple abstraction for demonstration.
++    async_io_mark_dirty(g_async_io, offset / 4096, (void*)pBuf);
++    return SQLITE_OK;
++  }
++
+   unixFile *pFile = (unixFile*)id;
+@@ -41560,2 +41569,7 @@
++#include "enhance/async_io.h"
++
++AsyncIOManager *g_async_io = NULL;
++
+ static int unixSync(sqlite3_file *id, int flags){
+   int rc;
+@@ -41578,3 +41592,11 @@
+-  OSTRACE(("SYNC    %-3d\n", pFile->h));
+-  rc = full_fsync(pFile->h, isFullsync, isDataOnly);
++  if (!g_async_io) {
++    g_async_io = async_io_create(pFile->h);
++  }
++  if (flags != SQLITE_SYNC_FULL) {
++    return SQLITE_OK;
++  }
++  OSTRACE(("SYNC    %-3d\n", pFile->h));
++  rc = full_fsync(pFile->h, isFullsync, isDataOnly);

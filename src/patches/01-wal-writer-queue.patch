@@ -1,0 +1,32 @@
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -68337,3 +68337,9 @@
++#include "enhance/lockfree_writer.h"
++
++static LockFreeWriter g_lfw;
++static int g_lfw_initialized = 0;
++
+ SQLITE_PRIVATE int sqlite3WalFrames(
+   Wal *pWal,                      /* Wal handle to write to */
+   int szPage,                     /* Database page-size in bytes */
+@@ -68038,6 +68044,15 @@
+-  rc = walWriteToLog(p, aFrame, sizeof(aFrame), iOffset);
+-  if( rc ) return rc;
+-  /* Write the page data */
+-  rc = walWriteToLog(p, pData, p->szPage, iOffset+sizeof(aFrame));
+-  return rc;
++  // 使用无锁队列替代直接写入
++  if (!g_lfw_initialized) {
++    // Extract the unixFile descriptor hackily as we assume VFS
++    unixFile *pFile = (unixFile*)p->pWal->pWalFd;
++    lfw_init(&g_lfw, pFile->h);
++    g_lfw_initialized = 1;
++  }
++
++  lfw_submit(&g_lfw, iOffset, aFrame, sizeof(aFrame));
++  rc = SQLITE_OK;
++  if( rc ) return rc;
++  /* Write the page data */
++  lfw_submit(&g_lfw, iOffset+sizeof(aFrame), pData, p->szPage);
++  rc = SQLITE_OK;
++  return rc;

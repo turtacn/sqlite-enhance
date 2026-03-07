@@ -1,0 +1,5 @@
+build/
+*.zip
+test/unit/test_*
+test/benchmark/bench_*
+test_results/*.db

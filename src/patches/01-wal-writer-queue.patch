@@ -1,32 +1,57 @@
+From 5f122e77f7600541f2ce0949780fa4d0aa6738ea Mon Sep 17 00:00:00 2001
+From: SQLite-Enhance Builder <build@sqlite-enhance.local>
+Date: Sun, 8 Mar 2026 07:45:17 +0000
+Subject: [PATCH] Stage 1: Add lockfree writer queue
+
+---
+ sqlite3.c | 26 ++++++++++++++++++++++++--
+ 1 file changed, 24 insertions(+), 2 deletions(-)
+
+diff --git a/sqlite3.c b/sqlite3.c
+index 8f9309a..8bf5fba 100644
 --- a/sqlite3.c
 +++ b/sqlite3.c
-@@ -68337,3 +68337,9 @@
+@@ -68000,6 +68000,28 @@ typedef struct WalWriter {
+ ** first write the part before iSyncPoint, then sync, then write the
+ ** rest.
+ */
++
++/* SQLite-Enhance: 无锁写入队列 */
 +#include "enhance/lockfree_writer.h"
 +
-+static LockFreeWriter g_lfw;
++static LockFreeWriter *g_lockfree_writer = NULL;
 +static int g_lfw_initialized = 0;
 +
- SQLITE_PRIVATE int sqlite3WalFrames(
-   Wal *pWal,                      /* Wal handle to write to */
-   int szPage,                     /* Database page-size in bytes */
-@@ -68038,6 +68044,15 @@
--  rc = walWriteToLog(p, aFrame, sizeof(aFrame), iOffset);
--  if( rc ) return rc;
--  /* Write the page data */
--  rc = walWriteToLog(p, pData, p->szPage, iOffset+sizeof(aFrame));
--  return rc;
-+  // 使用无锁队列替代直接写入
-+  if (!g_lfw_initialized) {
-+    // Extract the unixFile descriptor hackily as we assume VFS
-+    unixFile *pFile = (unixFile*)p->pWal->pWalFd;
-+    lfw_init(&g_lfw, pFile->h);
-+    g_lfw_initialized = 1;
++static int walWriteToLog(WalWriter*, void*, int, sqlite3_int64);
++
++static int walWriteToLogQueued(
++  WalWriter *p,
++  void *pContent,
++  int iAmt,
++  sqlite3_int64 iOffset
++){
++  if (!g_lfw_initialized || !g_lockfree_writer) {
++    return walWriteToLog(p, pContent, iAmt, iOffset);
 +  }
 +
-+  lfw_submit(&g_lfw, iOffset, aFrame, sizeof(aFrame));
-+  rc = SQLITE_OK;
-+  if( rc ) return rc;
-+  /* Write the page data */
-+  lfw_submit(&g_lfw, iOffset+sizeof(aFrame), pData, p->szPage);
-+  rc = SQLITE_OK;
-+  return rc;
++  return lfw_submit(g_lockfree_writer, iOffset, pContent, iAmt);
++}
++
+ static int walWriteToLog(
+   WalWriter *p,              /* WAL to write to */
+   void *pContent,            /* Content to be written */
+@@ -68036,10 +68058,10 @@ static int walWriteOneFrame(
+   u8 aFrame[WAL_FRAME_HDRSIZE];   /* Buffer to assemble frame-header in */
+   pData = pPage->pData;
+   walEncodeFrame(p->pWal, pPage->pgno, nTruncate, pData, aFrame);
+-  rc = walWriteToLog(p, aFrame, sizeof(aFrame), iOffset);
++  rc = walWriteToLogQueued(p, aFrame, sizeof(aFrame), iOffset);
+   if( rc ) return rc;
+   /* Write the page data */
+-  rc = walWriteToLog(p, pData, p->szPage, iOffset+sizeof(aFrame));
++  rc = walWriteToLogQueued(p, pData, p->szPage, iOffset+sizeof(aFrame));
+   return rc;
+ }
+
+--
+2.52.0

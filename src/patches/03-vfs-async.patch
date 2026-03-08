@@ -1,32 +1,49 @@
+From 58d65ac7001d42f40f4fea73c90e33a44e9b5843 Mon Sep 17 00:00:00 2001
+From: SQLite-Enhance Builder <build@sqlite-enhance.local>
+Date: Sun, 8 Mar 2026 07:45:20 +0000
+Subject: [PATCH] Stage 3: Add async I/O
+
+---
+ sqlite3.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/sqlite3.c b/sqlite3.c
+index 0128c78..2610cdf 100644
 --- a/sqlite3.c
 +++ b/sqlite3.c
-@@ -41297,2 +41297,11 @@
+@@ -41159,6 +41159,9 @@ static int seekAndRead(unixFile *id, sqlite3_int64 offset, void *pBuf, int cnt){
+ ** bytes were read successfully and SQLITE_IOERR if anything goes
+ ** wrong.
+ */
++#include "enhance/async_io.h"
++extern AsyncIOManager *g_async_io;
++
+ static int unixRead(
+   sqlite3_file *id,
+   void *pBuf,
+@@ -41296,6 +41299,10 @@ static int unixWrite(
+   int amt,
    sqlite3_int64 offset
  ){
-+  extern AsyncIOManager *g_async_io;
 +  if (g_async_io) {
-+    // We map a 4096-byte aligned chunk to our dirty pages list.
-+    // Simple abstraction for demonstration.
 +    async_io_mark_dirty(g_async_io, offset / 4096, (void*)pBuf);
 +    return SQLITE_OK;
 +  }
-+
    unixFile *pFile = (unixFile*)id;
-@@ -41560,2 +41569,7 @@
-+#include "enhance/async_io.h"
-+
-+AsyncIOManager *g_async_io = NULL;
-+
+   int wrote = 0;
+   assert( id );
+@@ -41559,6 +41566,12 @@ static int openDirectory(const char *zFilename, int *pFd){
+ ** will not roll back - possibly leading to database corruption.
+ */
  static int unixSync(sqlite3_file *id, int flags){
-   int rc;
-@@ -41578,3 +41592,11 @@
--  OSTRACE(("SYNC    %-3d\n", pFile->h));
--  rc = full_fsync(pFile->h, isFullsync, isDataOnly);
 +  if (!g_async_io) {
-+    g_async_io = async_io_create(pFile->h);
++    g_async_io = async_io_create(((unixFile*)id)->h);
 +  }
 +  if (flags != SQLITE_SYNC_FULL) {
 +    return SQLITE_OK;
 +  }
-+  OSTRACE(("SYNC    %-3d\n", pFile->h));
-+  rc = full_fsync(pFile->h, isFullsync, isDataOnly);
+   int rc;
+   unixFile *pFile = (unixFile*)id;
+
+--
+2.52.0

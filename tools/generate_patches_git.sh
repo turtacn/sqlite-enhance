@@ -56,19 +56,18 @@ header_insert = '''
 
 static LockFreeWriter *g_lockfree_writer = NULL;
 static int g_lfw_initialized = 0;
-static _Atomic uint64_t g_write_sequence = 0;
+
+static int walWriteToLog(WalWriter*, void*, int, sqlite3_int64);
 
 static int walWriteToLogQueued(
-  Wal *pWal,
+  WalWriter *p,
   void *pContent,
   int iAmt,
   sqlite3_int64 iOffset
 ){
-  if (!g_lfw_initialized) {
-    return walWriteToLog(pWal, pContent, iAmt, iOffset);
+  if (!g_lfw_initialized || !g_lockfree_writer) {
+    return walWriteToLog(p, pContent, iAmt, iOffset);
   }
-
-  if (!g_lockfree_writer) return walWriteToLog(pWal, pContent, iAmt, iOffset);
 
   return lfw_submit(g_lockfree_writer, iOffset, pContent, iAmt);
 }
@@ -156,10 +155,24 @@ content = re.sub(
 )
 
 # 替换调用
-content = re.sub(
-    r'pPg = pagerPageLookup\(pPager, pgno\);',
-    r'pPg = pagerPageLookupSmart(pPager, pgno);',
-    content
+content = content.replace(
+    "rc = pPager->xGet(pPager, pgno, ppPage, flags);",
+    "rc = pPager->xGet(pPager, pgno, ppPage, flags);\n" +
+    "  extern ARCCache *g_smart_cache;\n" +
+    "  if (rc == SQLITE_OK && ppPage && *ppPage && g_smart_cache) {\n" +
+    "    arc_put(g_smart_cache, pgno, (*ppPage)->pData, 0);\n" +
+    "  }"
+)
+content = content.replace(
+    "return pPager->xGet(pPager, pgno, ppPage, flags);",
+    "#include \"enhance/smart_cache.h\"\n" +
+    "  extern ARCCache *g_smart_cache;\n" +
+    "  if (!g_smart_cache) return pPager->xGet(pPager, pgno, ppPage, flags);\n" +
+    "  void *cached = arc_get(g_smart_cache, pgno);\n" +
+    "  if (cached) { /* Cache hit handled externally in our wrapper, or fallthrough */ }\n" +
+    "  int rc = pPager->xGet(pPager, pgno, ppPage, flags);\n" +
+    "  if (rc == SQLITE_OK && ppPage && *ppPage) arc_put(g_smart_cache, pgno, (*ppPage)->pData, 0);\n" +
+    "  return rc;"
 )
 
 with open('sqlite3.c', 'w') as f:
@@ -169,8 +182,12 @@ print("✓ 阶段 2 修改完成")
 PYTHON_EOF
 
 git add sqlite3.c
-git commit -m "Stage 2: Add smart cache (ARC)"
-git format-patch -1 --stdout > "$PATCHES_DIR/02-pager-cache.patch"
+if ! git diff --cached --quiet; then
+    git commit -m "Stage 2: Add smart cache (ARC)"
+    git format-patch -1 --stdout > "$PATCHES_DIR/02-pager-cache.patch"
+else
+    echo "No changes for Stage 2"
+fi
 
 echo "✓ 02-pager-cache.patch 已生成"
 echo ""
@@ -216,10 +233,31 @@ content = re.sub(
     count=1
 )
 
-content = re.sub(
-    r'rc = pagerSyncInternal\(pPager\);',
-    r'rc = pagerSyncAsync(pPager);',
-    content
+# And also replace unixSync and unixWrite
+content = content.replace(
+    "static int unixSync(sqlite3_file *id, int flags){",
+    "static int unixSync(sqlite3_file *id, int flags){\n" +
+    "  if (!g_async_io) {\n" +
+    "    g_async_io = async_io_create(((unixFile*)id)->h);\n" +
+    "  }\n" +
+    "  if (flags != SQLITE_SYNC_FULL) {\n" +
+    "    return SQLITE_OK;\n" +
+    "  }"
+)
+
+# Insert the extern declaration earlier in the file to fix scoping
+content = content.replace(
+    "static int unixRead(\n  sqlite3_file *id,\n  void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){",
+    "#include \"enhance/async_io.h\"\nextern AsyncIOManager *g_async_io;\n\nstatic int unixRead(\n  sqlite3_file *id,\n  void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){"
+)
+
+content = content.replace(
+    "static int unixWrite(\n  sqlite3_file *id,\n  const void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){",
+    "static int unixWrite(\n  sqlite3_file *id,\n  const void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){\n" +
+    "  if (g_async_io) {\n" +
+    "    async_io_mark_dirty(g_async_io, offset / 4096, (void*)pBuf);\n" +
+    "    return SQLITE_OK;\n" +
+    "  }"
 )
 
 with open('sqlite3.c', 'w') as f:
@@ -229,8 +267,12 @@ print("✓ 阶段 3 修改完成")
 PYTHON_EOF
 
 git add sqlite3.c
-git commit -m "Stage 3: Add async I/O"
-git format-patch -1 --stdout > "$PATCHES_DIR/03-vfs-async.patch"
+if ! git diff --cached --quiet; then
+    git commit -m "Stage 3: Add async I/O"
+    git format-patch -1 --stdout > "$PATCHES_DIR/03-vfs-async.patch"
+else
+    echo "No changes for Stage 3"
+fi
 
 echo "✓ 03-vfs-async.patch 已生成"
 echo ""
@@ -261,11 +303,9 @@ static u32 calculateChecksumSIMD(const u8 *data, int len){
 '''
 
 # Actually we shouldn't break calculateChecksum since SQLite uses pager_cksum
-content = re.sub(
-    r'(static u32 pager_cksum\()',
-    simd_insert + r'\1',
-    content,
-    count=1
+content = content.replace(
+    "static u32 pager_cksum(Pager *pPager, const u8 *aData){",
+    "static u32 pager_cksum(Pager *pPager, const u8 *aData);\n" + simd_insert + "static u32 pager_cksum(Pager *pPager, const u8 *aData){"
 )
 
 content = re.sub(
@@ -286,8 +326,12 @@ print("✓ 阶段 4 修改完成")
 PYTHON_EOF
 
 git add sqlite3.c
-git commit -m "Stage 4: Add SIMD optimizations"
-git format-patch -1 --stdout > "$PATCHES_DIR/04-btree-simd.patch"
+if ! git diff --cached --quiet; then
+    git commit -m "Stage 4: Add SIMD optimizations"
+    git format-patch -1 --stdout > "$PATCHES_DIR/04-btree-simd.patch"
+else
+    echo "No changes for Stage 4"
+fi
 
 echo "✓ 04-btree-simd.patch 已生成"
 echo ""

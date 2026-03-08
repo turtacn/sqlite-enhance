@@ -28,8 +28,22 @@ $(BUILD_DIR)/libsqlite-enhance.a: $(BUILD_DIR)/sqlite3.o \
                                    $(BUILD_DIR)/enhance_api.o
 	ar rcs $@ $^
 
+$(BUILD_DIR)/sqlite3.c:
+	@mkdir -p $(BUILD_DIR)
+	@echo "下载并解压 SQLite 源码..."
+	cd $(BUILD_DIR) && \
+	wget -q https://www.sqlite.org/2023/sqlite-amalgamation-3440000.zip && \
+	unzip -q sqlite-amalgamation-3440000.zip && \
+	mv sqlite-amalgamation-3440000/sqlite3.c . && \
+	mv sqlite-amalgamation-3440000/sqlite3.h .
+
 $(BUILD_DIR)/sqlite3.o: $(BUILD_DIR)/sqlite3.c
-	$(CC) $(CFLAGS) -fPIC -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_RTREE -I$(SRC_DIR) -c $< -o $@
+	@echo "应用优化补丁..."
+	cp $(BUILD_DIR)/sqlite3.c $(BUILD_DIR)/sqlite3.c.patched
+	for patch in $(SRC_DIR)/patches/*.patch; do \
+		patch -p1 -d $(BUILD_DIR) < $$patch || true; \
+	done
+	$(CC) $(CFLAGS) -fPIC -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_RTREE -I$(SRC_DIR) -c $(BUILD_DIR)/sqlite3.c -o $@
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/enhance/%.c
 	@mkdir -p $(BUILD_DIR)

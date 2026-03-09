@@ -1,0 +1,79 @@
+--- tools/generate_patches_git.sh
++++ tools/generate_patches_git.sh
+@@ -107,6 +107,8 @@
+     "    arc_put(g_smart_cache, pgno, (*ppPage)->pData, 0);\n" +
+     "  }"
+ )
++
++# Avoid intercepting in sqlite3PagerGet entirely if possible, or do it cleanly.
+ content = content.replace(
+     "return pPager->xGet(pPager, pgno, ppPage, flags);",
+     "#include \"enhance/smart_cache.h\"\n" +
+@@ -114,8 +116,11 @@
+     "  if (!g_smart_cache) return pPager->xGet(pPager, pgno, ppPage, flags);\n" +
+     "  void *cached = arc_get(g_smart_cache, pgno);\n" +
+     "  if (cached) {\n" +
+-    "     int rc = pPager->xGet(pPager, pgno, ppPage, flags);\n" +
+-    "     if (rc == SQLITE_OK && ppPage && *ppPage) memcpy((*ppPage)->pData, cached, pPager->pageSize);\n" +
++    "     PgHdr *pPg = pagerPageLookup(pPager, pgno);\n" +
++    "     if (pPg) {\n" +
++    "         *ppPage = pPg;\n" +
++    "         return SQLITE_OK;\n" +
++    "     }\n" +
++    "     int rc = pPager->xGet(pPager, pgno, ppPage, flags);\n" +
++    "     if (rc == SQLITE_OK && ppPage && *ppPage) memcpy((*ppPage)->pData, cached, pPager->pageSize);\n" +
+     "     return rc;\n" +
+     "  }\n" +
+     "  int rc = pPager->xGet(pPager, pgno, ppPage, flags);\n" +
+@@ -124,7 +129,7 @@
+ )
+
+ # 确保在 sqlite3PagerWrite 时更新缓存，避免脏读
+ content = content.replace(
+-    "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){\n#include \"enhance/smart_cache.h\"\n",
++    "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){",
+     "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){\n" +
+     "  extern ARCCache *g_smart_cache;\n" +
+     "  if (g_smart_cache) {\n" +
+@@ -172,11 +177,12 @@
+     "static int unixSync(sqlite3_file *id, int flags){\n" +
+     "  if (!g_async_io) {\n" +
+-    "    g_async_io = async_io_create(((unixFile*)id)->h);\n" +
+-    "  }\n" +
++    "    return full_fsync(((unixFile*)id)->h, flags, 0);\n" +
++    "  }\n" +
++    "  if (g_async_io->fd == -1) g_async_io->fd = ((unixFile*)id)->h;\n" +
+     "  if (flags != SQLITE_SYNC_FULL) {\n" +
+     "    return SQLITE_OK;\n" +
+     "  }"
+ )
+
+ # Insert the extern declaration earlier in the file to fix scoping
+@@ -186,9 +192,11 @@
+ )
+
+ content = content.replace(
+     "static int unixWrite(\n  sqlite3_file *id,\n  const void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){",
+     "static int unixWrite(\n  sqlite3_file *id,\n  const void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){\n" +
+-    "  if (g_async_io) {\n" +
++    "  if (g_async_io && g_async_io->fd != -1 && ((unixFile*)id)->h == g_async_io->fd) {\n" +
+     "    async_io_mark_dirty(g_async_io, offset, (void*)pBuf, amt);\n" +
+     "    return SQLITE_OK;\n" +
+     "  }"
+@@ -219,8 +227,12 @@
+
+ static u32 pager_cksum(Pager *pPager, const u8 *aData){
+   u32 cksum = pPager->cksumInit;         /* Checksum value to return */
+-  CPUFeatures f = detect_cpu_features();
+-  if (f.has_avx2) {
+-    return cksum + simd_checksum(aData, pPager->pageSize);
++  static CPUFeatures f = {0};
++  static int init = 0;
++  if (!init) {
++      f = detect_cpu_features();
++      init = 1;
++  }
++  if (f.has_avx2) {
++    return cksum + simd_checksum(aData, pPager->pageSize);
+   }
+   int i = pPager->pageSize-200;          /* Loop counter */

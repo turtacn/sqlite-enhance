@@ -16,7 +16,7 @@ void test_basic_cache_operations() {
 
     // 插入页面
     char page_data[4096] = "test page";
-    arc_put(cache, 1, page_data, 0);
+    arc_put(cache, 1, page_data, 4096);
 
     // 查找页面
     void *found = arc_get(cache, 1);

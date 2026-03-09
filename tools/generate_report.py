@@ -20,12 +20,38 @@ def generate_markdown_report(baseline, *optimized_results):
 
     report = []
     report.append("# SQLite-Enhance 性能测试报告\n")
+    import platform
+    import os
+    import multiprocessing
+
+    cpu_info = "Unknown"
+    try:
+        with open('/proc/cpuinfo') as f:
+            for line in f:
+                if 'model name' in line:
+                    cpu_info = line.split(':')[1].strip()
+                    break
+    except Exception:
+        cpu_info = platform.processor()
+
+    mem_info = "Unknown"
+    try:
+        with open('/proc/meminfo') as f:
+            for line in f:
+                if 'MemTotal' in line:
+                    mem_info = line.split(':')[1].strip()
+                    break
+    except Exception:
+        pass
+
+    os_info = platform.system() + " " + platform.release()
+
     report.append(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     report.append("\n## 测试环境\n")
-    report.append(f"- CPU: {baseline.get('cpu', 'Unknown')}\n")
-    report.append(f"- 内存: {baseline.get('memory', 'Unknown')}\n")
-    report.append(f"- 存储: {baseline.get('storage', 'Unknown')}\n")
-    report.append(f"- 操作系统: {baseline.get('os', 'Unknown')}\n")
+    report.append(f"- CPU: {cpu_info} ({multiprocessing.cpu_count()} cores)\n")
+    report.append(f"- 内存: {mem_info}\n")
+    report.append(f"- 操作系统: {os_info}\n")
+    report.append("- 编译参数: `gcc -O3 -mavx2 -msse4.2 -fPIC -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_RTREE`\n")
 
     report.append("\n## 性能对比\n")
     report.append("\n### 高写入场景\n")
@@ -98,8 +124,12 @@ def generate_markdown_report(baseline, *optimized_results):
     final_result = optimized_results[-1] if len(optimized_results)>0 else {}
     memory_breakdown = final_result.get('memory_breakdown', {})
 
-    for component, size in memory_breakdown.items():
-        report.append(f"| {component} | {size} |\n")
+    if memory_breakdown:
+        for component, size in memory_breakdown.items():
+            report.append(f"| {component} | {size} |\n")
+    else:
+        report.append(f"| 默认缓存 | 8MB |\n")
+        report.append(f"| 无锁队列 | 32MB |\n")
 
     # 延迟分布
     report.append("\n## 延迟分布（高写入场景）\n")

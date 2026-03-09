@@ -1,17 +1,17 @@
-From 7d14f0e1b662457a555d0b6ee548008d39044873 Mon Sep 17 00:00:00 2001
+From e243f2e235a1778c65c50dd5f4c57f3d795688a2 Mon Sep 17 00:00:00 2001
 From: SQLite-Enhance Builder <build@sqlite-enhance.local>
-Date: Mon, 9 Mar 2026 01:59:05 +0000
+Date: Mon, 9 Mar 2026 17:15:06 +0000
 Subject: [PATCH] Stage 1: Add lockfree writer queue
 
 ---
- sqlite3.c | 26 ++++++++++++++++++++++++--
- 1 file changed, 24 insertions(+), 2 deletions(-)
+ sqlite3.c | 33 +++++++++++++++++++++++++++++++--
+ 1 file changed, 31 insertions(+), 2 deletions(-)
 
 diff --git a/sqlite3.c b/sqlite3.c
-index 8f9309a..8bf5fba 100644
+index 8f9309a..99cd02a 100644
 --- a/sqlite3.c
 +++ b/sqlite3.c
-@@ -68000,6 +68000,28 @@ typedef struct WalWriter {
+@@ -68000,6 +68000,35 @@ typedef struct WalWriter {
  ** first write the part before iSyncPoint, then sync, then write the
  ** rest.
  */
@@ -22,6 +22,7 @@ index 8f9309a..8bf5fba 100644
 +static LockFreeWriter *g_lockfree_writer = NULL;
 +static int g_lfw_initialized = 0;
 +
++typedef struct WalWriter WalWriter;
 +static int walWriteToLog(WalWriter*, void*, int, sqlite3_int64);
 +
 +static int walWriteToLogQueued(
@@ -34,13 +35,19 @@ index 8f9309a..8bf5fba 100644
 +    return walWriteToLog(p, pContent, iAmt, iOffset);
 +  }
 +
++  // Set fd properly on first hit from the active WAL file struct
++  if (g_lockfree_writer->wal_fd == -1 && p && p->pFd) {
++    unixFile *pFile = (unixFile*)p->pFd;
++    g_lockfree_writer->wal_fd = pFile->h;
++  }
++
 +  return lfw_submit(g_lockfree_writer, iOffset, pContent, iAmt);
 +}
 +
  static int walWriteToLog(
    WalWriter *p,              /* WAL to write to */
    void *pContent,            /* Content to be written */
-@@ -68036,10 +68058,10 @@ static int walWriteOneFrame(
+@@ -68036,10 +68065,10 @@ static int walWriteOneFrame(
    u8 aFrame[WAL_FRAME_HDRSIZE];   /* Buffer to assemble frame-header in */
    pData = pPage->pData;
    walEncodeFrame(p->pWal, pPage->pgno, nTruncate, pData, aFrame);

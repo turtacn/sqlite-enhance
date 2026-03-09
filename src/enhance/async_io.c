@@ -37,9 +37,8 @@ static void* flush_thread(void *arg) {
 
         pthread_mutex_unlock(&mgr->lock);
 
-        // 批量写入
         for (int i = 0; i < count; i++) {
-            if (pwrite(mgr->fd, pages[i]->data, 4096, pages[i]->page_num * 4096) < 0) {
+            if (pwrite(mgr->fd, pages[i]->data, pages[i]->size, pages[i]->offset) < 0) {
                 // handle error
             }
             free(pages[i]->data);
@@ -70,11 +69,12 @@ AsyncIOManager* async_io_create(int fd) {
     return mgr;
 }
 
-void async_io_mark_dirty(AsyncIOManager *mgr, uint32_t page_num, void *data) {
+void async_io_mark_dirty(AsyncIOManager *mgr, uint64_t offset, void *data, uint32_t size) {
     DirtyPage *page = (DirtyPage*)malloc(sizeof(DirtyPage));
-    page->page_num = page_num;
-    page->data = malloc(4096);
-    memcpy(page->data, data, 4096);
+    page->offset = offset;
+    page->size = size;
+    page->data = malloc(size);
+    memcpy(page->data, data, size);
 
     pthread_mutex_lock(&mgr->lock);
     page->next = mgr->dirty_list;
@@ -98,7 +98,7 @@ void async_io_flush_sync(AsyncIOManager *mgr) {
     pthread_mutex_unlock(&mgr->lock);
 
     for (int i = 0; i < count; i++) {
-        if (pwrite(mgr->fd, pages[i]->data, 4096, pages[i]->page_num * 4096) < 0) {
+        if (pwrite(mgr->fd, pages[i]->data, pages[i]->size, pages[i]->offset) < 0) {
             // handle error
         }
         free(pages[i]->data);

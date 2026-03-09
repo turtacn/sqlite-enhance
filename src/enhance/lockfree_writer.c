@@ -17,28 +17,27 @@ static void* worker_thread(void *arg) {
             continue;
         }
 
-        // 批量处理多个请求
-        struct iovec iov[64];
-        int iov_count = 0;
+        // 批量处理多个请求 - 替换为保持 offset 的 pwrite 以防止写乱序或者使用不安全的系统文件指针
+        int count = 0;
 
-        while (tail != head && iov_count < 64) {
+        while (tail != head && count < 64) {
             uint64_t index = tail & (RING_BUFFER_SIZE - 1);
             WriteRequest *req = &lfw->ring[index];
 
             if (atomic_load(&req->status) != 2) break;
 
-            iov[iov_count].iov_base = req->data;
-            iov[iov_count].iov_len = req->size;
-            iov_count++;
+            if (lfw->wal_fd != -1) {
+                if (pwrite(lfw->wal_fd, req->data, req->size, req->offset) < 0) {
+                    // handle error appropriately or ignore
+                }
+            }
 
+            atomic_store(&req->status, 0); // Free slot
+            count++;
             tail++;
         }
 
-        // 使用writev批量写入
-        if (iov_count > 0) {
-            if (writev(lfw->wal_fd, iov, iov_count) < 0) {
-                // handle error appropriately or ignore
-            }
+        if (count > 0) {
             atomic_store(&lfw->tail, tail);
         }
     }

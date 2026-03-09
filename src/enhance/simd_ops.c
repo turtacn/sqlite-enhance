@@ -18,41 +18,18 @@ CPUFeatures detect_cpu_features() {
     return features;
 }
 
-/* AVX2优化的校验和计算 */
+/* AVX2优化的校验和计算 - 匹配SQLite的以200为步长的逻辑 */
 uint32_t simd_checksum(const uint8_t *data, size_t len) {
-    __m256i sum_vec = _mm256_setzero_si256();
-    size_t i;
+    uint32_t total = 0;
+    int i = len - 200;
 
-    // 每次处理32字节
-    for (i = 0; i + 32 <= len; i += 32) {
-        __m256i chunk = _mm256_loadu_si256((__m256i*)(data + i));
-
-        // 拆分为16位整数避免溢出
-        __m256i low = _mm256_unpacklo_epi8(chunk, _mm256_setzero_si256());
-        __m256i high = _mm256_unpackhi_epi8(chunk, _mm256_setzero_si256());
-
-        // Accumulate as 32-bit to avoid overflow in large buffers
-        __m256i low_32 = _mm256_madd_epi16(low, _mm256_set1_epi16(1));
-        __m256i high_32 = _mm256_madd_epi16(high, _mm256_set1_epi16(1));
-
-        sum_vec = _mm256_add_epi32(sum_vec, low_32);
-        sum_vec = _mm256_add_epi32(sum_vec, high_32);
-    }
-
-    // 水平求和
-    __m128i sum128 = _mm_add_epi32(
-        _mm256_extracti128_si256(sum_vec, 0),
-        _mm256_extracti128_si256(sum_vec, 1)
-    );
-
-    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(1, 0, 3, 2)));
-    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(2, 3, 0, 1)));
-
-    uint32_t total = _mm_cvtsi128_si32(sum128);
-
-    // 处理剩余字节
-    for (; i < len; i++) {
+    // SQLite's pager checksum samples a single byte every 200 bytes, starting from the end.
+    // Given this sparse read pattern, full SIMD vectorized 32-byte loads are inefficient
+    // since we only want 1 byte out of 200. We will implement the correct logic to
+    // avoid data corruption while maintaining compatibility.
+    while( i > 0 ){
         total += data[i];
+        i -= 200;
     }
 
     return total;

@@ -340,6 +340,13 @@ echo ""
 echo "验证生成的 patch 文件..."
 cd "$PROJECT_ROOT"
 
+# 重置工作目录以测试 patch
+cd "$WORK_DIR"
+git checkout master
+git checkout sqlite3.c
+git reset --hard HEAD~4 || git reset --hard $(git rev-list --max-parents=0 HEAD)
+cd "$PROJECT_ROOT"
+
 for patch in "$PATCHES_DIR"/*.patch; do
     echo "  检查 $(basename "$patch")..."
 
@@ -358,8 +365,9 @@ for patch in "$PATCHES_DIR"/*.patch; do
         echo "    ⚠ 警告: 缺少上下文行"
     fi
 
-    # 尝试 dry-run
-    if cd "$WORK_DIR" && patch --dry-run -p1 < "$patch" > /dev/null 2>&1; then
+    # 按顺序应用以测试
+    cd "$WORK_DIR"
+    if patch -p1 < "$patch" > /dev/null 2>&1; then
         echo "    ✓ patch 可以成功应用"
     else
         echo "    ✗ patch 应用失败"

@@ -7,14 +7,15 @@
 /* 脏页跟踪 */
 typedef struct DirtyPage {
     uint64_t offset;
-    void *data;
     uint32_t size;
+    void *data;
     struct DirtyPage *next;
 } DirtyPage;
 
 /* 异步I/O管理器 */
 typedef struct AsyncIOManager {
     DirtyPage *dirty_list;
+    DirtyPage *dirty_tail;
     pthread_mutex_t lock;
     pthread_cond_t cond;
     pthread_t flush_thread;

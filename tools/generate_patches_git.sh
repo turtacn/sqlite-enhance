@@ -188,7 +188,7 @@ content = content.replace(
 
 # 确保在 sqlite3PagerWrite 时更新缓存，避免脏读
 content = content.replace(
-    "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){\n#include \"enhance/smart_cache.h\"",
+    "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){",
     "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){\n" +
     "  extern ARCCache *g_smart_cache;\n" +
     "  if (g_smart_cache) {\n" +
@@ -259,9 +259,8 @@ content = content.replace(
     "static int unixSync(sqlite3_file *id, int flags){",
     "static int unixSync(sqlite3_file *id, int flags){\n" +
     "  if (!g_async_io) {\n" +
-    "    return full_fsync(((unixFile*)id)->h, flags, 0);\n" +
+    "    g_async_io = async_io_create(((unixFile*)id)->h);\n" +
     "  }\n" +
-    "  if (g_async_io->fd == -1) g_async_io->fd = ((unixFile*)id)->h;\n" +
     "  if (flags != SQLITE_SYNC_FULL) {\n" +
     "    return SQLITE_OK;\n" +
     "  }"
@@ -276,7 +275,7 @@ content = content.replace(
 content = content.replace(
     "static int unixWrite(\n  sqlite3_file *id,\n  const void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){",
     "static int unixWrite(\n  sqlite3_file *id,\n  const void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){\n" +
-    "  if (g_async_io && g_async_io->fd != -1 && ((unixFile*)id)->h == g_async_io->fd) {\n" +
+    "  if (g_async_io) {\n" +
     "    async_io_mark_dirty(g_async_io, offset, (void*)pBuf, amt);\n" +
     "    return SQLITE_OK;\n" +
     "  }"
@@ -316,12 +315,7 @@ simd_insert = '''
 
 static u32 pager_cksum(Pager *pPager, const u8 *aData){
   u32 cksum = pPager->cksumInit;         /* Checksum value to return */
-  static CPUFeatures f = {0};
-  static int init = 0;
-  if (!init) {
-      f = detect_cpu_features();
-      init = 1;
-  }
+  CPUFeatures f = detect_cpu_features();
   if (f.has_avx2) {
     return cksum + simd_checksum(aData, pPager->pageSize);
   }

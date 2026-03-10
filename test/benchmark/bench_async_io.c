@@ -39,6 +39,7 @@ void benchmark_transaction_throughput() {
     clock_gettime(CLOCK_MONOTONIC, &ts_end);
     double time_sync = (ts_end.tv_sec - ts_start.tv_sec) + (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000000.0;
     if (time_sync < 0.001) time_sync = 0.001;
+    double tps_sync = NUM_TRANSACTIONS / time_sync;
     sqlite3_close(db);
 
     // 测试2：异步刷盘模式
@@ -61,10 +62,11 @@ void benchmark_transaction_throughput() {
     clock_gettime(CLOCK_MONOTONIC, &ts_end);
     double time_async = (ts_end.tv_sec - ts_start.tv_sec) + (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000000.0;
     if (time_async < 0.001) time_async = 0.001;
+    double tps_async = NUM_TRANSACTIONS / time_async;
 
-    printf("同步模式: %.2fs\n", time_sync);
-    printf("异步模式: %.2fs\n", time_async);
-    printf("提升倍数: %.2fx\n", time_sync / time_async);
+    printf("同步模式: 耗时 %.2fs, 吞吐量 %.2f TPS\n", time_sync, tps_sync);
+    printf("异步模式: 耗时 %.2fs, 吞吐量 %.2f TPS\n", time_async, tps_async);
+    printf("TPS 提升倍数: %.2fx\n", tps_async / tps_sync);
 
     sqlite3_flush_async_io(db);
     sqlite3_close(db);

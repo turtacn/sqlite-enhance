@@ -4,13 +4,33 @@
 #include <string.h>
 #include <time.h>
 
+static void flush_list(AsyncIOManager *mgr, DirtyPage *list) {
+    DirtyPage *p = list;
+    int count = 0;
+    while (p) {
+        if (pwrite(mgr->fd, p->data, p->size, p->offset) < 0) {
+            // handle error
+        }
+        DirtyPage *next = p->next;
+        free(p->data);
+        free(p);
+        p = next;
+        count++;
+    }
+
+    if (count > 0) {
+        fsync(mgr->fd);
+        mgr->total_syncs++;
+        mgr->batched_pages += count;
+    }
+}
+
 static void* flush_thread(void *arg) {
     AsyncIOManager *mgr = (AsyncIOManager*)arg;
 
     while (mgr->running) {
         pthread_mutex_lock(&mgr->lock);
 
-        // 等待脏页或超时（100ms）
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
         ts.tv_nsec += 100000000;  // 100ms
@@ -25,31 +45,13 @@ static void* flush_thread(void *arg) {
             continue;
         }
 
-        // 收集所有脏页
-        DirtyPage *pages[1024];
-        int count = 0;
-        DirtyPage *p = mgr->dirty_list;
-        while (p && count < 1024) {
-            pages[count++] = p;
-            p = p->next;
-        }
+        DirtyPage *list_to_flush = mgr->dirty_list;
         mgr->dirty_list = NULL;
+        mgr->dirty_tail = NULL;
 
         pthread_mutex_unlock(&mgr->lock);
 
-        for (int i = 0; i < count; i++) {
-            if (pwrite(mgr->fd, pages[i]->data, pages[i]->size, pages[i]->offset) < 0) {
-                // handle error
-            }
-            free(pages[i]->data);
-            free(pages[i]);
-        }
-
-        // 单次fsync
-        fsync(mgr->fd);
-
-        mgr->total_syncs++;
-        mgr->batched_pages += count;
+        flush_list(mgr, list_to_flush);
     }
 
     return NULL;
@@ -74,11 +76,17 @@ void async_io_mark_dirty(AsyncIOManager *mgr, uint64_t offset, void *data, uint3
     page->offset = offset;
     page->size = size;
     page->data = malloc(size);
+    page->next = NULL;
     memcpy(page->data, data, size);
 
     pthread_mutex_lock(&mgr->lock);
-    page->next = mgr->dirty_list;
-    mgr->dirty_list = page;
+    if (mgr->dirty_tail) {
+        mgr->dirty_tail->next = page;
+        mgr->dirty_tail = page;
+    } else {
+        mgr->dirty_list = page;
+        mgr->dirty_tail = page;
+    }
     pthread_cond_signal(&mgr->cond);
     pthread_mutex_unlock(&mgr->lock);
 }
@@ -86,28 +94,13 @@ void async_io_mark_dirty(AsyncIOManager *mgr, uint64_t offset, void *data, uint3
 void async_io_flush_sync(AsyncIOManager *mgr) {
     pthread_mutex_lock(&mgr->lock);
 
-    DirtyPage *pages[1024];
-    int count = 0;
-    DirtyPage *p = mgr->dirty_list;
-    while (p && count < 1024) {
-        pages[count++] = p;
-        p = p->next;
-    }
+    DirtyPage *list_to_flush = mgr->dirty_list;
     mgr->dirty_list = NULL;
+    mgr->dirty_tail = NULL;
 
     pthread_mutex_unlock(&mgr->lock);
 
-    for (int i = 0; i < count; i++) {
-        if (pwrite(mgr->fd, pages[i]->data, pages[i]->size, pages[i]->offset) < 0) {
-            // handle error
-        }
-        free(pages[i]->data);
-        free(pages[i]);
-    }
-    fsync(mgr->fd);
-
-    mgr->total_syncs++;
-    mgr->batched_pages += count;
+    flush_list(mgr, list_to_flush);
 }
 
 void async_io_destroy(AsyncIOManager *mgr) {

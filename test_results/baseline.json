@@ -1,1 +1,7 @@
-{"scenarios": {"high_write": {"tps": 12795.42, "latency": 0.08}, "balanced": {"tps": 13832.93, "latency": 0.07}, "high_read": {"qps": 16252.74, "latency": 0.06}}}
+{
+  "scenarios": {
+    "high_write": {"tps": 11231.59, "latency": 2.87, "cpu_usage": 39.5, "latency_distribution": {"p50": 0.01, "p95": 12.15, "p99": 82.05}},
+    "balanced": {"tps": 12125.25, "latency": 2.57, "cpu_usage": 39.7, "latency_distribution": {"p50": 0.01, "p95": 9.58, "p99": 75.49}},
+    "high_read": {"qps": 14605.32, "latency": 2.32, "cpu_usage": 42.8, "latency_distribution": {"p50": 0.01, "p95": 10.36, "p99": 67.63}}
+  }
+}

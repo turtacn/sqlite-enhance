@@ -5,7 +5,7 @@
      "  }"
  )
 +
-+# Avoid intercepting in sqlite3PagerGet entirely if possible, or do it cleanly.
++# Bypass xGet when ARC matches
  content = content.replace(
      "return pPager->xGet(pPager, pgno, ppPage, flags);",
      "#include \"enhance/smart_cache.h\"\n" +

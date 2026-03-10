@@ -23,10 +23,45 @@ uint32_t simd_checksum(const uint8_t *data, size_t len) {
     uint32_t total = 0;
     int i = len - 200;
 
-    // SQLite's pager checksum samples a single byte every 200 bytes, starting from the end.
-    // Given this sparse read pattern, full SIMD vectorized 32-byte loads are inefficient
-    // since we only want 1 byte out of 200. We will implement the correct logic to
-    // avoid data corruption while maintaining compatibility.
+    // Process 8 chunks of 200 bytes per loop iteration using SIMD gather.
+    // 8 * 200 = 1600 bytes stride per SIMD load.
+
+    __m256i sum_vec = _mm256_setzero_si256();
+    __m256i indices = _mm256_set_epi32(
+        0,
+        -200,
+        -400,
+        -600,
+        -800,
+        -1000,
+        -1200,
+        -1400
+    );
+
+    while (i >= 1400) {
+        // We use gather to pull exactly the 8 bytes we need from their 200-byte distant offsets.
+        // gather instruction takes the base pointer, vector of 32-bit indices, and a scale.
+        // However, gather pulls 32-bit ints, but we only want 8 bits. We will mask off the high 24 bits.
+
+        // Setup a base pointer pointing to the current maximum offset (data + i)
+        const int *base = (const int *)(data + i);
+
+        __m256i gathered = _mm256_i32gather_epi32(base, indices, 1);
+        __m256i masked = _mm256_and_si256(gathered, _mm256_set1_epi32(0xFF));
+        sum_vec = _mm256_add_epi32(sum_vec, masked);
+
+        i -= 1600;
+    }
+
+    // Horizontally sum the 8 32-bit integers in sum_vec
+    __m128i hi128 = _mm256_extractf128_si256(sum_vec, 1);
+    __m128i lo128 = _mm256_castsi256_si128(sum_vec);
+    __m128i sum128 = _mm_add_epi32(hi128, lo128);
+    sum128 = _mm_hadd_epi32(sum128, sum128);
+    sum128 = _mm_hadd_epi32(sum128, sum128);
+    total += _mm_cvtsi128_si32(sum128);
+
+    // Process remaining elements (less than 8)
     while( i > 0 ){
         total += data[i];
         i -= 200;

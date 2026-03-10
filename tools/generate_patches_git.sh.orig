@@ -188,7 +188,7 @@ content = content.replace(
 
 # 确保在 sqlite3PagerWrite 时更新缓存，避免脏读
 content = content.replace(
-    "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){",
+    "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){\n#include \"enhance/smart_cache.h\"",
     "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){\n" +
     "  extern ARCCache *g_smart_cache;\n" +
     "  if (g_smart_cache) {\n" +

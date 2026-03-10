@@ -32,7 +32,8 @@ typedef struct CacheEntry {
 /* API接口 */
 ARCCache* arc_create(int capacity);
 void* arc_get(ARCCache *cache, uint32_t page_num);
-void arc_put(ARCCache *cache, uint32_t page_num, void *data, int dirty);
+void arc_put(ARCCache *cache, uint32_t page_num, void *data, int size);
 void arc_destroy(ARCCache *cache);
+void arc_invalidate(ARCCache *cache, uint32_t page_num);
 
 #endif

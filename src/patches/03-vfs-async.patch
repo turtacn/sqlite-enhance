@@ -1,14 +1,14 @@
-From 6661be7ae805814374d8ef4cabc924bbad48eace Mon Sep 17 00:00:00 2001
+From fbaf90268f008bb46493381083fbebd0a1a9b923 Mon Sep 17 00:00:00 2001
 From: SQLite-Enhance Builder <build@sqlite-enhance.local>
-Date: Mon, 9 Mar 2026 01:59:08 +0000
+Date: Mon, 9 Mar 2026 17:15:09 +0000
 Subject: [PATCH] Stage 3: Add async I/O
 
 ---
- sqlite3.c | 13 +++++++++++++
- 1 file changed, 13 insertions(+)
+ sqlite3.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
 
 diff --git a/sqlite3.c b/sqlite3.c
-index 0128c78..2610cdf 100644
+index 4261f09..ae15c56 100644
 --- a/sqlite3.c
 +++ b/sqlite3.c
 @@ -41159,6 +41159,9 @@ static int seekAndRead(unixFile *id, sqlite3_int64 offset, void *pBuf, int cnt){
@@ -25,20 +25,21 @@ index 0128c78..2610cdf 100644
    int amt,
    sqlite3_int64 offset
  ){
-+  if (g_async_io) {
-+    async_io_mark_dirty(g_async_io, offset / 4096, (void*)pBuf);
++  if (g_async_io && g_async_io->fd != -1 && ((unixFile*)id)->h == g_async_io->fd) {
++    async_io_mark_dirty(g_async_io, offset, (void*)pBuf, amt);
 +    return SQLITE_OK;
 +  }
    unixFile *pFile = (unixFile*)id;
    int wrote = 0;
    assert( id );
-@@ -41559,6 +41566,12 @@ static int openDirectory(const char *zFilename, int *pFd){
+@@ -41559,6 +41566,13 @@ static int openDirectory(const char *zFilename, int *pFd){
  ** will not roll back - possibly leading to database corruption.
  */
  static int unixSync(sqlite3_file *id, int flags){
 +  if (!g_async_io) {
-+    g_async_io = async_io_create(((unixFile*)id)->h);
++    return full_fsync(((unixFile*)id)->h, flags, 0);
 +  }
++  if (g_async_io->fd == -1) g_async_io->fd = ((unixFile*)id)->h;
 +  if (flags != SQLITE_SYNC_FULL) {
 +    return SQLITE_OK;
 +  }

@@ -6,8 +6,9 @@
 
 /* 脏页跟踪 */
 typedef struct DirtyPage {
-    uint32_t page_num;
+    uint64_t offset;
     void *data;
+    uint32_t size;
     struct DirtyPage *next;
 } DirtyPage;
 
@@ -27,7 +28,7 @@ typedef struct AsyncIOManager {
 
 /* API接口 */
 AsyncIOManager* async_io_create(int fd);
-void async_io_mark_dirty(AsyncIOManager *mgr, uint32_t page_num, void *data);
+void async_io_mark_dirty(AsyncIOManager *mgr, uint64_t offset, void *data, uint32_t size);
 void async_io_flush_sync(AsyncIOManager *mgr);  // 同步刷盘（用于关键事务）
 void async_io_destroy(AsyncIOManager *mgr);
 

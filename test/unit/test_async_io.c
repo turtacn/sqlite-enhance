@@ -17,7 +17,7 @@ void test_basic_async_io() {
     assert(mgr != NULL);
 
     char page_data[4096] = "async test data";
-    async_io_mark_dirty(mgr, 1, page_data);
+    async_io_mark_dirty(mgr, 1, page_data, 4096);
 
     async_io_flush_sync(mgr);
 

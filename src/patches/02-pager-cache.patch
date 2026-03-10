@@ -1,14 +1,14 @@
-From e8ff39509ea0b9a4cc9c30cfba13a7126e5d84fe Mon Sep 17 00:00:00 2001
+From c93b1ea7e96c369eaef89677d2b5fbc896ab5e38 Mon Sep 17 00:00:00 2001
 From: SQLite-Enhance Builder <build@sqlite-enhance.local>
-Date: Mon, 9 Mar 2026 01:59:07 +0000
+Date: Mon, 9 Mar 2026 17:15:07 +0000
 Subject: [PATCH] Stage 2: Add smart cache (ARC)
 
 ---
- sqlite3.c | 13 ++++++++++++-
- 1 file changed, 12 insertions(+), 1 deletion(-)
+ sqlite3.c | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
 
 diff --git a/sqlite3.c b/sqlite3.c
-index 8bf5fba..0128c78 100644
+index 99cd02a..4261f09 100644
 --- a/sqlite3.c
 +++ b/sqlite3.c
 @@ -62089,6 +62089,10 @@ SQLITE_PRIVATE int sqlite3PagerGet(
@@ -22,7 +22,7 @@ index 8bf5fba..0128c78 100644
    if( rc ){
      printf("PAGE %u failed with 0x%02x\n", pgno, rc);
      fflush(stdout);
-@@ -62096,7 +62100,14 @@ SQLITE_PRIVATE int sqlite3PagerGet(
+@@ -62096,7 +62100,18 @@ SQLITE_PRIVATE int sqlite3PagerGet(
    return rc;
  #else
    /* Normal, high-speed version of sqlite3PagerGet() */
@@ -31,9 +31,13 @@ index 8bf5fba..0128c78 100644
 +  extern ARCCache *g_smart_cache;
 +  if (!g_smart_cache) return pPager->xGet(pPager, pgno, ppPage, flags);
 +  void *cached = arc_get(g_smart_cache, pgno);
-+  if (cached) { /* Cache hit handled externally in our wrapper, or fallthrough */ }
++  if (cached) {
++     int rc = pPager->xGet(pPager, pgno, ppPage, flags);
++     if (rc == SQLITE_OK && ppPage && *ppPage) memcpy((*ppPage)->pData, cached, pPager->pageSize);
++     return rc;
++  }
 +  int rc = pPager->xGet(pPager, pgno, ppPage, flags);
-+  if (rc == SQLITE_OK && ppPage && *ppPage) arc_put(g_smart_cache, pgno, (*ppPage)->pData, 0);
++  if (rc == SQLITE_OK && ppPage && *ppPage) arc_put(g_smart_cache, pgno, (*ppPage)->pData, pPager->pageSize);
 +  return rc;
  #endif
  }

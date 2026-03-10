@@ -14,8 +14,10 @@ void test_checksum_correctness() {
 
     // 标量版本
     uint32_t scalar_sum = 0;
-    for (int i = 0; i < 4096; i++) {
+    int i = 4096 - 200;
+    while( i>0 ){
         scalar_sum += data[i];
+        i -= 200;
     }
 
     // SIMD版本

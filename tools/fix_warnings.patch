@@ -1,0 +1,44 @@
+--- src/enhance/enhance_api.c
++++ src/enhance/enhance_api.c
+@@ -45,6 +45,8 @@
+ }
+
+ int sqlite3_enable_lockfree_writer(sqlite3 *db, int enable, int queue_size) {
++    (void)db;
++    (void)queue_size;
+     if (enable) {
+         if (!g_lockfree_writer) {
+             g_lockfree_writer = lockfree_writer_create(8192); // Default size
+@@ -64,6 +66,7 @@
+ }
+
+ int sqlite3_enable_smart_cache(sqlite3 *db, int enable, int capacity) {
++    (void)db;
+     if (enable) {
+         if (!g_smart_cache) {
+             g_smart_cache = smart_cache_create(capacity > 0 ? capacity : 1000);
+@@ -79,6 +82,8 @@
+ }
+
+ int sqlite3_enable_async_io(sqlite3 *db, int enable, int interval_ms) {
++    (void)db;
++    (void)interval_ms;
+     // The creation needs a file descriptor which is only available inside VFS
+     // So we just set a flag that it's globally enabled
+     // Currently we initialize it on first VFS open
+@@ -94,6 +99,7 @@
+ }
+
+ int sqlite3_get_enhance_stats(sqlite3 *db, sqlite3_enhance_stats *stats) {
++    (void)db;
+     if (!stats) return SQLITE_ERROR;
+
+     memset(stats, 0, sizeof(sqlite3_enhance_stats));
+@@ -107,6 +113,7 @@
+ }
+
+ int sqlite3_flush_async_io(sqlite3 *db) {
++    (void)db;
+     if (g_async_io) {
+         async_io_flush_sync(g_async_io);
+         return SQLITE_OK;

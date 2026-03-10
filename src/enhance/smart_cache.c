@@ -77,6 +77,7 @@ static void evict_from_t1_to_b1(ARCCache *cache) {
         add_to_ghost(cache->b1, &cache->b1_size, cache->total_capacity, tail->page_num);
         remove_from_list(&cache->t1_head, tail);
         cache->t1_tail = tail->prev;
+        if (tail->page_data) free(tail->page_data);
         free(tail);
         cache->t1_size--;
     }
@@ -94,6 +95,7 @@ static void evict_from_t2_to_b2(ARCCache *cache) {
         add_to_ghost(cache->b2, &cache->b2_size, cache->total_capacity, tail->page_num);
         remove_from_list(&cache->t2_head, tail);
         cache->t2_tail = tail->prev;
+        if (tail->page_data) free(tail->page_data);
         free(tail);
         cache->t2_size--;
     }
@@ -137,19 +139,26 @@ void* arc_get(ARCCache *cache, uint32_t page_num) {
     return NULL;  // 缓存未命中
 }
 
-void arc_put(ARCCache *cache, uint32_t page_num, void *data, int dirty) {
+void arc_put(ARCCache *cache, uint32_t page_num, void *data, int size) {
+    if (size <= 0) size = 4096; // fallback safeguard
+
     // 如果已经在缓存中，更新数据并按ARC规则处理
     CacheEntry *entry = find_in_list(cache->t1_head, page_num);
     if (entry) {
-        entry->page_data = data;
-        entry->dirty = dirty;
+        // Deep copy data to avoid dangling pointer issues if upstream frees
+        if (entry->page_data) free(entry->page_data);
+        entry->page_data = malloc(size);
+        memcpy(entry->page_data, data, size);
+        entry->dirty = 0;
         arc_get(cache, page_num); // move to T2
         return;
     }
     entry = find_in_list(cache->t2_head, page_num);
     if (entry) {
-        entry->page_data = data;
-        entry->dirty = dirty;
+        if (entry->page_data) free(entry->page_data);
+        entry->page_data = malloc(size);
+        memcpy(entry->page_data, data, size);
+        entry->dirty = 0;
         arc_get(cache, page_num); // move to MRU
         return;
     }
@@ -168,23 +177,49 @@ void arc_put(ARCCache *cache, uint32_t page_num, void *data, int dirty) {
     // 插入新页面到T1
     entry = (CacheEntry*)malloc(sizeof(CacheEntry));
     entry->page_num = page_num;
-    entry->page_data = data;
-    entry->dirty = dirty;
+    entry->page_data = malloc(size);
+    memcpy(entry->page_data, data, size);
+    entry->dirty = 0;
     add_to_head(&cache->t1_head, entry);
     if (!cache->t1_tail) cache->t1_tail = entry;
     cache->t1_size++;
 }
 
+void arc_invalidate(ARCCache *cache, uint32_t page_num) {
+    if (!cache) return;
+    CacheEntry *entry = find_in_list(cache->t1_head, page_num);
+    if (entry) {
+        remove_from_list(&cache->t1_head, entry);
+        if (cache->t1_tail == entry) cache->t1_tail = entry->prev;
+        if (entry->page_data) free(entry->page_data);
+        free(entry);
+        cache->t1_size--;
+        return;
+    }
+    entry = find_in_list(cache->t2_head, page_num);
+    if (entry) {
+        remove_from_list(&cache->t2_head, entry);
+        if (cache->t2_tail == entry) cache->t2_tail = entry->prev;
+        if (entry->page_data) free(entry->page_data);
+        free(entry);
+        cache->t2_size--;
+        return;
+    }
+}
+
 void arc_destroy(ARCCache *cache) {
+    if (!cache) return;
     CacheEntry *curr = cache->t1_head;
     while(curr) {
         CacheEntry *next = curr->next;
+        if (curr->page_data) free(curr->page_data);
         free(curr);
         curr = next;
     }
     curr = cache->t2_head;
     while(curr) {
         CacheEntry *next = curr->next;
+        if (curr->page_data) free(curr->page_data);
         free(curr);
         curr = next;
     }

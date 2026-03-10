@@ -45,6 +45,8 @@ void sqlite3_enhance_cleanup(void) {
 }
 
 int sqlite3_enable_lockfree_writer(sqlite3 *db, int enable, int queue_size) {
+    (void)db;
+    (void)queue_size;
     if (enable) {
         if (!g_lockfree_writer) {
             g_lockfree_writer = malloc(sizeof(LockFreeWriter));
@@ -64,6 +66,7 @@ int sqlite3_enable_lockfree_writer(sqlite3 *db, int enable, int queue_size) {
 }
 
 int sqlite3_enable_smart_cache(sqlite3 *db, int enable, int capacity) {
+    (void)db;
     if (enable) {
         if (!g_smart_cache) {
             g_smart_cache = arc_create(capacity);
@@ -79,6 +82,8 @@ int sqlite3_enable_smart_cache(sqlite3 *db, int enable, int capacity) {
 }
 
 int sqlite3_enable_async_io(sqlite3 *db, int enable, int interval_ms) {
+    (void)db;
+    (void)interval_ms;
     if (enable) {
         if (!g_async_io) {
             g_async_io = async_io_create(-1);
@@ -94,6 +99,7 @@ int sqlite3_enable_async_io(sqlite3 *db, int enable, int interval_ms) {
 }
 
 int sqlite3_get_enhance_stats(sqlite3 *db, sqlite3_enhance_stats *stats) {
+    (void)db;
     if (!stats) return SQLITE_ERROR;
     memset(stats, 0, sizeof(*stats));
     if (g_smart_cache) {
@@ -107,6 +113,7 @@ int sqlite3_get_enhance_stats(sqlite3 *db, sqlite3_enhance_stats *stats) {
 }
 
 int sqlite3_flush_async_io(sqlite3 *db) {
+    (void)db;
     if (!g_async_io) return SQLITE_OK;
     async_io_flush_sync(g_async_io);
     return SQLITE_OK;

@@ -1,17 +1,17 @@
-From d98fec36bd6b7a6b6e4287c00106618cb42a1e44 Mon Sep 17 00:00:00 2001
+From c473d6f28fda09dc979958cc7d02e798604cb8ec Mon Sep 17 00:00:00 2001
 From: SQLite-Enhance Builder <build@sqlite-enhance.local>
-Date: Mon, 9 Mar 2026 15:09:36 +0000
+Date: Tue, 10 Mar 2026 05:55:56 +0000
 Subject: [PATCH] Stage 4: Add SIMD optimizations
 
 ---
- sqlite3.c | 10 ++++++++++
- 1 file changed, 10 insertions(+)
+ sqlite3.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
 
 diff --git a/sqlite3.c b/sqlite3.c
-index 1f2413b..d31f354 100644
+index ae15c56..d8c4159 100644
 --- a/sqlite3.c
 +++ b/sqlite3.c
-@@ -58628,8 +58628,16 @@ static void pagerUnlockAndRollback(Pager *pPager){
+@@ -58629,8 +58629,21 @@ static void pagerUnlockAndRollback(Pager *pPager){
  ** correct and the middle be corrupt.  Thus, this "checksum" scheme,
  ** though fast and simple, catches the mostly likely kind of corruption.
  */
@@ -21,14 +21,19 @@ index 1f2413b..d31f354 100644
 +
  static u32 pager_cksum(Pager *pPager, const u8 *aData){
    u32 cksum = pPager->cksumInit;         /* Checksum value to return */
-+  CPUFeatures f = detect_cpu_features();
++  static CPUFeatures f = {0};
++  static int init = 0;
++  if (!init) {
++      f = detect_cpu_features();
++      init = 1;
++  }
 +  if (f.has_avx2) {
 +    return cksum + simd_checksum(aData, pPager->pageSize);
 +  }
    int i = pPager->pageSize-200;          /* Loop counter */
    while( i>0 ){
      cksum += aData[i];
-@@ -58637,6 +58645,8 @@ static u32 pager_cksum(Pager *pPager, const u8 *aData){
+@@ -58638,6 +58651,8 @@ static u32 pager_cksum(Pager *pPager, const u8 *aData){
    }
    return cksum;
  }

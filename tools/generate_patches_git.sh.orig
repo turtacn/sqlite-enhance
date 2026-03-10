@@ -262,6 +262,7 @@ content = content.replace(
     "    return full_fsync(((unixFile*)id)->h, flags, 0);\n" +
     "  }\n" +
     "  if (g_async_io->fd == -1) g_async_io->fd = ((unixFile*)id)->h;\n" +
+    "  }\n" +
     "  if (flags != SQLITE_SYNC_FULL) {\n" +
     "    return SQLITE_OK;\n" +
     "  }"

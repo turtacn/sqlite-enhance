@@ -1,5 +1,9 @@
 build/
 *.zip
-test/unit/test_*
-test/benchmark/bench_*
 test_results/*.db
+test/benchmark/bench_*
+!test/benchmark/*.c
+!test/benchmark/*.h
+test/unit/test_*
+!test/unit/*.c
+!test/unit/*.h

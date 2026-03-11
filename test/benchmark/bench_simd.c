@@ -8,10 +8,8 @@ extern uint32_t simd_checksum(const uint8_t *data, size_t len);
 
 static uint32_t scalar_checksum(const uint8_t *aData, size_t len){
   uint32_t cksum = 0;
-  int i = len - 200;
-  while( i > 0 ){
+  for (size_t i = 0; i < len; i++) {
     cksum += aData[i];
-    i -= 200;
   }
   return cksum;
 }

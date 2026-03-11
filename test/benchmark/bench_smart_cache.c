@@ -7,7 +7,7 @@
 extern int sqlite3_enable_smart_cache(sqlite3*, int, int);
 
 #define NUM_PAGES 10000
-#define NUM_QUERIES 50000
+#define NUM_QUERIES 500000
 
 double run_benchmark(int enable_optimization, double *out_qps) {
     sqlite3 *db;
@@ -34,7 +34,7 @@ double run_benchmark(int enable_optimization, double *out_qps) {
     sqlite3_exec(db, "BEGIN", NULL, NULL, NULL);
     for (int i = 0; i < NUM_PAGES; i++) {
         char sql[128];
-        snprintf(sql, sizeof(sql), "INSERT INTO test VALUES (%d, 'data_payload')", i);
+        snprintf(sql, sizeof(sql), "INSERT INTO test VALUES (%d, 'data_payload_that_takes_up_some_space')", i);
         sqlite3_exec(db, sql, NULL, NULL, NULL);
     }
     sqlite3_exec(db, "COMMIT", NULL, NULL, NULL);
@@ -46,8 +46,9 @@ double run_benchmark(int enable_optimization, double *out_qps) {
     clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
     sqlite3_stmt *stmt;
-    sqlite3_prepare_v2(db, "SELECT * FROM test WHERE id = ?", -1, &stmt, NULL);
+    sqlite3_prepare_v2(db, "SELECT v FROM test WHERE id = ?", -1, &stmt, NULL);
 
+    volatile int dummy_sum = 0;
     for (int i = 0; i < NUM_QUERIES; i++) {
         // 80% of reads hit the latest 50 pages (hot working set)
         // 20% of reads hit random pages (causing churn)
@@ -59,7 +60,13 @@ double run_benchmark(int enable_optimization, double *out_qps) {
         }
 
         sqlite3_bind_int(stmt, 1, target_id);
-        sqlite3_step(stmt);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            // Force data read so compiler doesn't optimize it out
+            const unsigned char *text = sqlite3_column_text(stmt, 0);
+            if (text) {
+                dummy_sum += text[0];
+            }
+        }
         sqlite3_reset(stmt);
     }
 
@@ -67,11 +74,16 @@ double run_benchmark(int enable_optimization, double *out_qps) {
 
     clock_gettime(CLOCK_MONOTONIC, &ts_end);
     double elapsed = (ts_end.tv_sec - ts_start.tv_sec) + (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000000.0;
-    if (elapsed < 0.001) elapsed = 0.001;
+    if (elapsed < 0.001) elapsed = 0.001; // prevent div zero
 
     *out_qps = NUM_QUERIES / elapsed;
 
     sqlite3_close(db);
+    remove(db_name);
+    remove("bench_cache_0.db-wal");
+    remove("bench_cache_1.db-wal");
+    remove("bench_cache_0.db-shm");
+    remove("bench_cache_1.db-shm");
     return elapsed;
 }
 
@@ -80,8 +92,8 @@ int main() {
     double time_original = run_benchmark(0, &qps_original);
     double time_enhanced = run_benchmark(1, &qps_enhanced);
 
-    printf("默认 LRU 缓存: 耗时 %.2fs, 吞吐量 %.2f QPS\n", time_original, qps_original);
-    printf("ARC 智能缓存: 耗时 %.2fs, 吞吐量 %.2f QPS\n", time_enhanced, qps_enhanced);
+    printf("默认 LRU 缓存: 耗时 %.3fs, 吞吐量 %.2f QPS\n", time_original, qps_original);
+    printf("ARC 智能缓存: 耗时 %.3fs, 吞吐量 %.2f QPS\n", time_enhanced, qps_enhanced);
     printf("QPS 提升倍数: %.2fx\n", qps_enhanced / qps_original);
     return 0;
 }

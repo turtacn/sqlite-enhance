@@ -1,7 +1,7 @@
 {
   "scenarios": {
-    "high_write": {"tps": 12118.76, "latency": 2.61, "cpu_usage": 41.7, "latency_distribution": {"p50": 0.01, "p95": 8.66, "p99": 82.12}},
-    "balanced": {"tps": 14458.51, "latency": 2.24, "cpu_usage": 44.2, "latency_distribution": {"p50": 0.01, "p95": 1.98, "p99": 69.93}},
-    "high_read": {"qps": 14450.60, "latency": 2.19, "cpu_usage": 43.5, "latency_distribution": {"p50": 0.01, "p95": 6.72, "p99": 69.67}}
+    "high_write": {"tps": 9350.95, "latency": 3.65, "cpu_usage": 34.4, "latency_distribution": {"p50": 0.01, "p95": 3.19, "p99": 121.62}},
+    "balanced": {"tps": 9855.48, "latency": 3.53, "cpu_usage": 35.7, "latency_distribution": {"p50": 0.01, "p95": 2.81, "p99": 118.26}},
+    "high_read": {"qps": 12578.77, "latency": 2.37, "cpu_usage": 37.7, "latency_distribution": {"p50": 0.01, "p95": 1.99, "p99": 81.07}}
   }
 }

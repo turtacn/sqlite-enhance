@@ -112,3 +112,30 @@ void async_io_destroy(AsyncIOManager *mgr) {
     pthread_cond_destroy(&mgr->cond);
     free(mgr);
 }
+
+int async_io_read_intercept(AsyncIOManager *mgr, uint64_t offset, void *pBuf, int amt) {
+    if (!mgr) return 0;
+
+    int intercepted = 0;
+    pthread_mutex_lock(&mgr->lock);
+
+    // Search from tail backwards ideally, but we have a singly linked list.
+    // Traverse to find the newest update to this offset.
+    DirtyPage *p = mgr->dirty_list;
+    DirtyPage *latest = NULL;
+    while (p) {
+        if (p->offset <= offset && (p->offset + p->size) >= (offset + amt)) {
+            latest = p;
+        }
+        p = p->next;
+    }
+
+    if (latest) {
+        uint64_t internal_offset = offset - latest->offset;
+        memcpy(pBuf, (char*)latest->data + internal_offset, amt);
+        intercepted = 1;
+    }
+
+    pthread_mutex_unlock(&mgr->lock);
+    return intercepted;
+}

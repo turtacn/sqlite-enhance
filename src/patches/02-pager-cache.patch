@@ -1,6 +1,6 @@
-From 4d35aa0287912748faeb6c90a8d7e8325e497401 Mon Sep 17 00:00:00 2001
+From d61d085aa62f2a1e149c7b87c843c4673fde4b8a Mon Sep 17 00:00:00 2001
 From: SQLite-Enhance Builder <build@sqlite-enhance.local>
-Date: Tue, 10 Mar 2026 05:55:54 +0000
+Date: Wed, 11 Mar 2026 06:47:12 +0000
 Subject: [PATCH] Stage 2: Add smart cache (ARC)
 
 ---

@@ -31,6 +31,7 @@ typedef struct AsyncIOManager {
 AsyncIOManager* async_io_create(int fd);
 void async_io_mark_dirty(AsyncIOManager *mgr, uint64_t offset, void *data, uint32_t size);
 void async_io_flush_sync(AsyncIOManager *mgr);  // 同步刷盘（用于关键事务）
+int async_io_read_intercept(AsyncIOManager *mgr, uint64_t offset, void *pBuf, int amt);
 void async_io_destroy(AsyncIOManager *mgr);
 
 #endif

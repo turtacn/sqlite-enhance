@@ -190,6 +190,7 @@ content = content.replace(
 content = content.replace(
     "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){\n#include \"enhance/smart_cache.h\"",
     "SQLITE_PRIVATE int sqlite3PagerWrite(PgHdr *pPg){\n" +
+    "#include \"enhance/smart_cache.h\"\n" +
     "  extern ARCCache *g_smart_cache;\n" +
     "  if (g_smart_cache) {\n" +
     "      arc_put(g_smart_cache, pPg->pgno, pPg->pData, pPg->pPager->pageSize);\n" +
@@ -262,6 +263,7 @@ content = content.replace(
     "    return full_fsync(((unixFile*)id)->h, flags, 0);\n" +
     "  }\n" +
     "  if (g_async_io->fd == -1) g_async_io->fd = ((unixFile*)id)->h;\n" +
+    "  async_io_flush_sync(g_async_io);\n" +
     "  if (flags != SQLITE_SYNC_FULL) {\n" +
     "    return SQLITE_OK;\n" +
     "  }"
@@ -270,7 +272,10 @@ content = content.replace(
 # Insert the extern declaration earlier in the file to fix scoping
 content = content.replace(
     "static int unixRead(\n  sqlite3_file *id,\n  void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){",
-    "#include \"enhance/async_io.h\"\nextern AsyncIOManager *g_async_io;\n\nstatic int unixRead(\n  sqlite3_file *id,\n  void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){"
+    "#include \"enhance/async_io.h\"\nextern AsyncIOManager *g_async_io;\n\nstatic int unixRead(\n  sqlite3_file *id,\n  void *pBuf,\n  int amt,\n  sqlite3_int64 offset\n){\n" +
+    "  if (g_async_io && g_async_io->fd != -1 && ((unixFile*)id)->h == g_async_io->fd) {\n" +
+    "    if (async_io_read_intercept(g_async_io, offset, pBuf, amt)) return SQLITE_OK;\n" +
+    "  }"
 )
 
 content = content.replace(

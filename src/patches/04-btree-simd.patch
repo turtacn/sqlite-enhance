@@ -1,6 +1,6 @@
-From c473d6f28fda09dc979958cc7d02e798604cb8ec Mon Sep 17 00:00:00 2001
+From 8e5ee08784a866c59497b942f026b7ac8698c0f5 Mon Sep 17 00:00:00 2001
 From: SQLite-Enhance Builder <build@sqlite-enhance.local>
-Date: Tue, 10 Mar 2026 05:55:56 +0000
+Date: Wed, 11 Mar 2026 06:47:15 +0000
 Subject: [PATCH] Stage 4: Add SIMD optimizations
 
 ---
@@ -8,10 +8,10 @@ Subject: [PATCH] Stage 4: Add SIMD optimizations
  1 file changed, 15 insertions(+)
 
 diff --git a/sqlite3.c b/sqlite3.c
-index ae15c56..d8c4159 100644
+index 182bf42..b003643 100644
 --- a/sqlite3.c
 +++ b/sqlite3.c
-@@ -58629,8 +58629,21 @@ static void pagerUnlockAndRollback(Pager *pPager){
+@@ -58633,8 +58633,21 @@ static void pagerUnlockAndRollback(Pager *pPager){
  ** correct and the middle be corrupt.  Thus, this "checksum" scheme,
  ** though fast and simple, catches the mostly likely kind of corruption.
  */
@@ -33,7 +33,7 @@ index ae15c56..d8c4159 100644
    int i = pPager->pageSize-200;          /* Loop counter */
    while( i>0 ){
      cksum += aData[i];
-@@ -58638,6 +58651,8 @@ static u32 pager_cksum(Pager *pPager, const u8 *aData){
+@@ -58642,6 +58655,8 @@ static u32 pager_cksum(Pager *pPager, const u8 *aData){
    }
    return cksum;
  }

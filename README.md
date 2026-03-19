@@ -1,6 +1,6 @@
 # SQLite-Enhance
 
-面向高并发写入场景的SQLite性能优化版本，专为sagaflow等状态持久化场景设计。
+面向高并发写入场景的SQLite性能优化版本。
 
 ## 核心特性
 
